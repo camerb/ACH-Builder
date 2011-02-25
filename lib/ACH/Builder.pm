@@ -817,7 +817,7 @@ Tim Keefer <tkeefer@gmail.com>
 
 =head1 CONTRIBUTOR
 
-Cameron Baustian <cameronbaustian@gmail.com>
+Cameron Baustian <camerb@cpan.org>
 
 =head1 COPYRIGHT
 
