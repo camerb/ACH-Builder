@@ -199,20 +199,21 @@ sub make_batch {
 
     # loop over the detail records
     foreach my $record ( @{ $records } ) {
+        #TODO die on negative amount
 
-        if ($record->{transaction_code} == 27) {
+        if ($record->{transaction_code} =~ /(27|37)/) {
            #if it is a debit
            $self->{__BATCH_TOTAL_DEBIT__} += $record->{amount};
            $self->{__DEBIT_AMOUNT__} += $record->{amount};
-           #FIXME did he just put it in the wrong place?
            $self->{__TOTAL_DEBIT__} += $record->{amount};
 
-        } elsif ($record->{transaction_code} == 22) {
+        } elsif ($record->{transaction_code} =~ /(22|32)/ ) {
            #if it is a credit
            $self->{__BATCH_TOTAL_CREDIT__} += $record->{amount};
            $self->{__CREDIT_AMOUNT__} += $record->{amount};
-           #FIXME did he just put it in the wrong place?
            $self->{__TOTAL_CREDIT__} += $record->{amount};
+        } else {
+           die 'unsupported transaction_code';
         }
 
         # modify batch values
