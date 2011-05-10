@@ -1,5 +1,10 @@
 Revision history for Perl extension ACH-Builder.
-0.09  Fri Jan 28 11:36:14 CST 2010
+0.10  Tue May 10 12:41:43 CST 2011
+    - allowed savings account transaction_codes
+    - error for transaction_codes that are unsupported
+    - error for negative transaction amounts
+
+0.09  Fri Jan 28 11:36:14 CST 2011
     - allowed originating dfi code
     - allowed switch between credits and debits
     - fixed computation of batch and file totals
