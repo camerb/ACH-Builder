@@ -8,7 +8,7 @@ use POSIX qw( strftime );
 our $VERSION = '0.10';
 
 #-------------------------------------------------
-# new( $file ? )
+# new({ ... })
 #-------------------------------------------------
 sub new {
     my ( $class, $vars ) = @_;
@@ -53,8 +53,7 @@ sub new {
 
     # populate self with data from site
     return( $self );
-
-} # END new
+}
 
 #-------------------------------------------------
 # to_string()
@@ -62,7 +61,6 @@ sub new {
 sub to_string {
     my $self = shift;
     return( join( "\n", @{ $self->{__ACH_DATA__} } ) );
-
 }
 
 #-------------------------------------------------
@@ -231,7 +229,6 @@ sub make_batch {
 
     # get batch control record
     $self->_make_batch_control_record();
-
 }
 
 #-------------------------------------------------
@@ -609,7 +606,7 @@ __END__
 
 =head1 NAME
 
-ACH::Builder - Tools for Building ACH (Automated Clearing House) Files
+ACH::Builder - Tools for building ACH (Automated Clearing House) files
 
 =head1 SYNOPSIS
 
@@ -664,9 +661,7 @@ ACH::Builder - Tools for Building ACH (Automated Clearing House) Files
 
 =head1 DESCRIPTION
 
-ACH File Structure
-
-This module is tool to help construct ACH files, which are fixed width
+This module is tool to help construct ACH files, which are fixed-width
 formatted files accpected by most banks. ACH (Automated Clearing House)
 is an electronic banking network operating system in the United States.
 ACH processes large volumes of both credit and debit transactions which
@@ -680,17 +675,24 @@ on insurance premiums, mortgage loans, and other kinds of bills.
 
 =head1 DETAIL RECORD FORMAT
 
-Detail Record Format
+The C<make_batch> function expects entry detail records in this format:
 
-=over 4
+ {
+   customer_name    => 'JOHN SMITH',   # Maximum of 22 characters
+   customer_acct    => '0000-0111111', # Maximum of 15 characters
+   amount           => '2501',         # In whole cents; this is $25.01
+   routing_number   => '10010101',     # 8 digits
+   bank_account     => '103030030',    # Maximum of 17 characters
+   transaction_code => '27',
+ }
 
- { customer_name    => 'JOHN SMITH',
-   customer_acct    => '0000-0111111',
-   amount           => '2501',
-   routing_number   => '010010101'
-   bank_account     => '103030030' }
+Only the following transaction codes are supported:
 
-=back
+ 22 - Deposit to checking account
+ 27 - Debit from checking account
+ 32 - Deposit to savings account
+ 37 - Debit from savings account
+
 
 =head1 METHODS
 
@@ -700,9 +702,7 @@ Detail Record Format
 
 params: Hash Ref { company_id => '...', company_note ... }
 
-** set methods are also provided for these parameters
-
-=over 4
+Setter methods are also provided for these parameters:
 
  service_class_code
  destination_name
@@ -719,24 +719,22 @@ params: Hash Ref { company_id => '...', company_note ... }
  blocking_factor
  format_code
 
-=back
-
 =item make_file_header_record
 
 Called to create the File Header record. This should be called before
-"make_batch".
+C<make_batch>.
 
 =item make_file_control_record
 
 Called to create the File Control Record. This should be called after
-"make_batch".
+C<make_batch>.
 
 =item make_batch
 
 params: AoH Records
 
-Called the create and stash a batch of ACH entries. This method requires
-an AoH records. See "sample_detail_records" from record specifications.
+Called to create and stash a batch of ACH entries. This method requires
+a list of hashrefs in the detail record format described above.
 
 =item format_rules
 
@@ -744,19 +742,7 @@ Hash of ACH format rules.
 
 =item sample_detail_records
 
-AoH of sample detail records
-
-Detail Record Format
-
-=over 4
-
- { customer_name    => 'JOHN SMITH',
-   customer_acct    => '0000-0111111',
-   amount           => '2501',
-   routing_number   => '010010101'
-   bank_account     => '103030030' }
-
-=back
+AoH of sample detail records. See above for format details.
 
 =item to_string
 
@@ -798,7 +784,11 @@ returns the built ACH file
 
 =head1 NOTES
 
-ACH File structure.
+The ACH record format is officially documented in the NACHA "Operating
+Rules & Guidelines" publication, which is not freely available. It can
+be purchased at: https://www.nacha.org/achrules
+
+ACH file structure:
 
  File Header
    Batch Header
@@ -811,7 +801,8 @@ ACH File structure.
 
 =head1 LIMITATIONS
 
-Only supports the ACH format.
+Only certain types of ACH transactions are supported (see the detail
+record format above).
 
 =head1 AUTHOR
 
@@ -823,7 +814,6 @@ Cameron Baustian <camerb@cpan.org>
 
 =head1 COPYRIGHT
 
-Tim Keefer
-Cameron Baustian
+Tim Keefer, Cameron Baustian
 
 =cut
