@@ -179,9 +179,9 @@ sub ach_data {
 # make_batch( @$records )
 #-------------------------------------------------
 sub make_batch {
-    my( $self, $records ) = @_;
+    my ( $self, $records ) = @_;
 
-    return if scalar( @{ $records } ) <= 0;
+    return unless ref $records eq 'ARRAY' && @$records;
 
     # bump the batch count
     ++$self->{__BATCH_COUNT__};
@@ -613,38 +613,26 @@ ACH::Builder - Tools for building ACH (Automated Clearing House) files
   use ACH::Builder;
 
   my $ach = ACH::Builder->new( {
-
-      # (required) Company Identification, Fed Tax ID
+      # Required
       company_id        => '11-111111',
-
-      # (required) This will appear on the receiver's bank statement
       company_name      => 'MY COMPANY',
-
-      # (required) a brief description of the nature of the
-      # payments this will apper on the receiver's bank statement
       entry_description => 'TV-TELCOM',
-
-      # (required)
       destination       => '123123123',
       destination_name  => 'COMMERCE BANK',
+      origination       => '12312311',
+      origination_name  => 'MYCOMPANY',
 
-      # (required)
-      origination            => '12312311',
-      origination_name       => 'MYCOMPANY',
-
-      # (optional)
+      # Optional
       company_note      => 'BILL',
-
-      # (optional)
       effective_date    => 'yymmdd',
 
   } );
 
-  # I've included some sample detail records
-  my @samples = $ach->sample_detail_records();
+  # load some sample records
+  my @samples = $ach->sample_detail_records;
 
   # build file header record
-  $ach->make_file_header_record();
+  $ach->make_file_header_record;
 
   # build batch for web entries
   $ach->set_entry_class_code( 'WEB' );
@@ -655,7 +643,7 @@ ACH::Builder - Tools for building ACH (Automated Clearing House) files
   $ach->make_batch( \@samples );
 
   # build file control record
-  $ach->make_file_control_record();
+  $ach->make_file_control_record;
 
   print $ach->to_string;
 
@@ -672,6 +660,49 @@ are established by the National Automated Clearing House Association
 ACH credit transfers include direct deposit payroll payments and payments
 to contractors and vendors. ACH debit transfers include consumer payments
 on insurance premiums, mortgage loans, and other kinds of bills.
+
+=head1 CONFIGURATION
+
+The parameters below can be passed to the constructor C<new> in a hashref.
+
+=head2 company_id
+
+Required. Your 10-digit company number; usually your Federal tax ID.
+
+=head2 company_name
+
+Required. Your company name to appear on the receiver's statement; up to 16
+characters.
+
+=head2 entry_description
+
+Required per batch. A brief description of the nature of the transactions.
+This will appear on the receiver's bank statement. Maximum of 10 characters.
+
+=head2 destination
+
+Required per file. The 9-digit routing number for the destination bank.
+
+=head2 destination_name
+
+Optional per file. A 23-character string identifying the destination bank.
+
+=head2 origination
+
+Required per file. This will usually be the same as the C<company_id>.
+
+=head2 origination_name
+
+Required per file. This will usually be the same as the C<company_name>,
+but note that it can be up to 23 characters long.
+
+=head2 company_note
+
+Optional per batch. For your own internal use. Maximum 20 characters.
+
+=head2 effective_date
+
+Optional per batch. Date in C<yymmdd> format that the transactions should be posted.
 
 =head1 DETAIL RECORD FORMAT
 
@@ -696,59 +727,35 @@ Only the following transaction codes are supported:
 
 =head1 METHODS
 
-=over 4
+=head2 new({ company_id => '...', company_note ... })
 
-=item new (constructor)
+See above for configuration details.
 
-params: Hash Ref { company_id => '...', company_note ... }
+=head2 make_file_header_record
 
-Setter methods are also provided for these parameters:
+Create the File Header record. This should be called before C<make_batch>.
 
- service_class_code
- destination_name
- origination_name
- destination
- origination
- entry_class_code
- entry_description
- company_id
- company_name
- company_note
- file_id_modifier
- record_size
- blocking_factor
- format_code
+=head2 make_file_control_record
 
-=item make_file_header_record
+Create the File Control Record. This should be called after C<make_batch>.
 
-Called to create the File Header record. This should be called before
-C<make_batch>.
+=head2 make_batch([ { customer_name => ... }, { ... }, ... ])
 
-=item make_file_control_record
-
-Called to create the File Control Record. This should be called after
-C<make_batch>.
-
-=item make_batch
-
-params: AoH Records
-
-Called to create and stash a batch of ACH entries. This method requires
+Create and stash a batch of ACH entries. This method requires
 a list of hashrefs in the detail record format described above.
 
-=item format_rules
+=head2 format_rules
 
-Hash of ACH format rules.
+Returns a hash of ACH format rules. Used internally to generate the
+fixed-width format required for output.
 
-=item sample_detail_records
+=head2 sample_detail_records
 
-AoH of sample detail records. See above for format details.
+Returns an array of hashes of sample detail records. See above for format details.
 
-=item to_string
+=head2 to_string
 
-returns the built ACH file
-
-=back
+Returns the built ACH file.
 
 =head1 METHOD Setters
 
@@ -765,6 +772,14 @@ returns the built ACH file
 =item set_origination
 
 =item set_entry_class_code
+
+The code must be one of:
+
+ PPD - Prearranged Payments and Deposit entries for consumer items (the default)
+ CCD - Cash Concentration and Disbursement entries
+ CTX - Corporate Trade Exchange entries for corporate transactions
+ TEL - Telephone initiated entries
+ WEB - Authorization received via the Internet
 
 =item set_entry_description
 
@@ -784,8 +799,8 @@ returns the built ACH file
 
 =head1 NOTES
 
-The ACH record format is officially documented in the NACHA "Operating
-Rules & Guidelines" publication, which is not freely available. It can
+The ACH record format is officially documented in the NACHA I<Operating
+Rules & Guidelines> publication, which is not freely available. It can
 be purchased at: https://www.nacha.org/achrules
 
 ACH file structure:
