@@ -11,48 +11,48 @@ our $VERSION = '0.10';
 # new( $file ? )
 #-------------------------------------------------
 sub new {
-	my ( $class, $vars ) = @_;
+    my ( $class, $vars ) = @_;
 
-	my $self = {};
-	bless( $self, $class );
+    my $self = {};
+    bless( $self, $class );
 
-	# set default values
+    # set default values
     $self->{__BATCH_COUNT__}           = 0;
     $self->{__BLOCK_COUNT__}           = 0;
-	$self->{__ENTRY_COUNT__}           = 0;
-	$self->{__ENTRY_HASH__}	           = 0;
-	$self->{__DEBIT_AMOUNT__}          = 0;
-	$self->{__CREDIT_AMOUNT__}         = 0;
+    $self->{__ENTRY_COUNT__}           = 0;
+    $self->{__ENTRY_HASH__}            = 0;
+    $self->{__DEBIT_AMOUNT__}          = 0;
+    $self->{__CREDIT_AMOUNT__}         = 0;
 
     $self->{__BATCH_TOTAL_DEBIT__}     = 0;
     $self->{__BATCH_TOTAL_CREDIT__}    = 0;
     $self->{__BATCH_ENTRY_COUNT__}     = 0;
     $self->{__BATCH_ENTRY_HASH__}      = 0;
 
-	$self->{__SERVICE_CLASS_CODE__}    = $vars->{service_class_code} || 200;
-	$self->{__IMMEDIATE_DEST_NAME__}   = $vars->{destination_name};
-	$self->{__IMMEDIATE_ORIGIN_NAME__} = $vars->{origination_name};
-	$self->{__IMMEDIATE_DEST__}        = $vars->{destination};
-	$self->{__IMMEDIATE_ORIGIN__}      = $vars->{origination};
-	$self->{__ORIGIN_STATUS_CODE__}    = $vars->{origin_status_code};
-	$self->{__ORIGINATING_DFI__}       = $vars->{originating_dfi} || substr $vars->{destination}, 0, 8;
+    $self->{__SERVICE_CLASS_CODE__}    = $vars->{service_class_code} || 200;
+    $self->{__IMMEDIATE_DEST_NAME__}   = $vars->{destination_name};
+    $self->{__IMMEDIATE_ORIGIN_NAME__} = $vars->{origination_name};
+    $self->{__IMMEDIATE_DEST__}        = $vars->{destination};
+    $self->{__IMMEDIATE_ORIGIN__}      = $vars->{origination};
+    $self->{__ORIGIN_STATUS_CODE__}    = $vars->{origin_status_code};
+    $self->{__ORIGINATING_DFI__}       = $vars->{originating_dfi} || substr $vars->{destination}, 0, 8;
 
-	$self->{__ENTRY_CLASS_CODE__}      = $vars->{entry_class_code} || 'PPD';
-	$self->{__ENTRY_DESCRIPTION__}     = $vars->{entry_description};
-	$self->{__COMPANY_ID__}            = $vars->{company_id};
-	$self->{__COMPANY_NAME__}          = $vars->{company_name};
-	$self->{__COMPANY_NOTE__}          = $vars->{company_note};
+    $self->{__ENTRY_CLASS_CODE__}      = $vars->{entry_class_code} || 'PPD';
+    $self->{__ENTRY_DESCRIPTION__}     = $vars->{entry_description};
+    $self->{__COMPANY_ID__}            = $vars->{company_id};
+    $self->{__COMPANY_NAME__}          = $vars->{company_name};
+    $self->{__COMPANY_NOTE__}          = $vars->{company_note};
 
-	$self->{__FILE_ID_MODIFIER__}      = $vars->{file_id_modifier} || 'A';
-	$self->{__RECORD_SIZE__}           = $vars->{record_size}      || 94;
-	$self->{__BLOCKING_FACTOR__}       = $vars->{blocking_factor}  || 10;
-	$self->{__FORMAT_CODE__}           = $vars->{format_code}      || 1;
-	$self->{__EFFECTIVE_DATE__}        = $vars->{effective_date}   || strftime( "%y%m%d", localtime( time + 86400 ) );
+    $self->{__FILE_ID_MODIFIER__}      = $vars->{file_id_modifier} || 'A';
+    $self->{__RECORD_SIZE__}           = $vars->{record_size}      || 94;
+    $self->{__BLOCKING_FACTOR__}       = $vars->{blocking_factor}  || 10;
+    $self->{__FORMAT_CODE__}           = $vars->{format_code}      || 1;
+    $self->{__EFFECTIVE_DATE__}        = $vars->{effective_date}   || strftime( "%y%m%d", localtime( time + 86400 ) );
 
-	$self->{__ACH_DATA__}              = [];
+    $self->{__ACH_DATA__}              = [];
 
-	# populate self with data from site
-	return( $self );
+    # populate self with data from site
+    return( $self );
 
 } # END new
 
