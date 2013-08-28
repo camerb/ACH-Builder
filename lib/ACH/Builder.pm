@@ -121,6 +121,7 @@ The C<make_batch> function expects entry detail records in this format:
    routing_number   => '10010101',     # 9 digits
    bank_account     => '103030030',    # Maximum of 17 characters
    transaction_code => '27',
+   entry_trace      => 'ABCDE0000000001', # Optional trace number
  }
 
 Only the following transaction codes are supported:
@@ -130,6 +131,10 @@ Only the following transaction codes are supported:
  32 - Deposit to savings account
  37 - Debit from savings account
 
+Rules for the C<entry_trace> may vary. An example institution requires the
+first 8 characters be the destination bank's routing number (excluding the
+final checksum digit), and the next 7 characters be a zero-filled number
+incrementing sequentially for each record.
 
 =head1 METHODS
 
@@ -345,14 +350,14 @@ sub _make_detail_record {
         customer_name
         transaction_type
         addenda
-        bank_15
+        entry_trace
     );
 
     # add to record unless already defined
     $record->{record_type}      ||= 6;
     $record->{transaction_code} ||= 27;
     $record->{transaction_type} ||= 'S';
-    $record->{bank_15}          ||= '';
+    $record->{entry_trace}      ||= '';
     $record->{addenda}          ||= 0;
 
     # stash detail record
@@ -504,7 +509,7 @@ sub format_rules {
         amount              => '%010.10s',
         bank_2              => '%-2.2s',
         transaction_type    => '%-2.2s',
-        bank_15             => '%-15.15s',
+        entry_trace         => '%-15.15s',
         addenda             => '%01.1s',
         trace_num           => '%-15.15s',
         transaction_code    => '%-2.2s',
