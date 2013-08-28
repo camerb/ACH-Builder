@@ -164,28 +164,26 @@ sub new {
     $self->{__BATCH_ENTRY_COUNT__}     = 0;
     $self->{__BATCH_ENTRY_HASH__}      = 0;
 
+    $self->{__ACH_DATA__}              = [];
+
     $self->set_service_class_code(      $vars->{service_class_code} || 200);
     $self->set_immediate_dest_name(     $vars->{destination_name});
     $self->set_immediate_origin_name(   $vars->{origination_name});
     $self->set_immediate_dest(          $vars->{destination});
     $self->set_immediate_origin(        $vars->{origination});
 
-    $self->set_origin_status_code(      $vars->{origin_status_code} || 1);
-    $self->{__ORIGINATING_DFI__}       = $vars->{origin_dfi_id} || substr $vars->{destination}, 0, 8;
-
     $self->set_entry_class_code(        $vars->{entry_class_code} || 'PPD');
     $self->set_entry_description(       $vars->{entry_description});
     $self->set_company_id(              $vars->{company_id});
-    $self->{__COMPANY_NAME__}          = $vars->{company_name};
+    $self->set_company_name(            $vars->{company_name});
     $self->set_company_note(            $vars->{company_note});
+    $self->set_effective_date(          $vars->{effective_date} || strftime( "%y%m%d", localtime( time + 86400 ) ));
 
-    $self->set_file_id_modifier(        $vars->{file_id_modifier} || 'A');
-    $self->set_record_size(             $vars->{record_size}      || 94);
-    $self->set_blocking_factor(         $vars->{blocking_factor}  || 10);
-    $self->set_format_code(             $vars->{format_code}      || 1);
-    $self->{__EFFECTIVE_DATE__}        = $vars->{effective_date}   || strftime( "%y%m%d", localtime( time + 86400 ) );
-
-    $self->{__ACH_DATA__}              = [];
+    $self->set_origin_status_code(      $vars->{origin_status_code} || 1);
+    $self->set_file_id_modifier(        $vars->{file_id_modifier}   || 'A');
+    $self->set_record_size(             $vars->{record_size}        || 94);
+    $self->set_blocking_factor(         $vars->{blocking_factor}    || 10);
+    $self->set_format_code(             $vars->{format_code}        || 1);
 
     return( $self );
 }
@@ -705,6 +703,7 @@ sub set_immediate_origin {
     my ( $self, $p ) = @_;
     check_length($p, 'immediate_origin');
     $self->{__IMMEDIATE_ORIGIN__} = $p;
+    $self->{__ORIGINATING_DFI__} = substr $p, 0, 8;
 }
 
 =pod
@@ -791,6 +790,21 @@ sub set_company_id {
 
 =pod
 
+=head2 set_company_name( $value )
+
+Required. Your company name to appear on the receiver's statement; up to 16
+characters.
+
+=cut
+
+sub set_company_name {
+    my ( $self, $p ) = @_;
+    check_length($p, 'company_name');
+    $self->{__COMPANY_NAME__} = $p;
+}
+
+=pod
+
 =head2 set_company_note( $value )
 
 An optional parameter for your internal use, limited to 20 characters.
@@ -801,6 +815,21 @@ sub set_company_note {
     my ( $self, $p ) = @_;
     check_length($p, 'company_note');
     $self->{__COMPANY_NOTE__} = $p;
+}
+
+=pod
+
+=head2 set_effective_date( $value )
+
+The date that transactions in this batch will be posted. The date should be
+in I<YYMMDD> format. Defaults to tomorrow.
+
+=cut
+
+sub set_effective_date {
+    my ( $self, $p ) = @_;
+    croak "Invalid effective_date" unless $p =~ /^\d{6}$/;
+    $self->{__EFFECTIVE_DATE__} = $p;
 }
 
 =pod
