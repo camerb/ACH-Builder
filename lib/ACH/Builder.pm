@@ -36,7 +36,7 @@ sub new {
     $self->set_immediate_dest(          $vars->{destination});
     $self->set_immediate_origin(        $vars->{origination});
 
-    $self->{__ORIGIN_STATUS_CODE__}    = $vars->{origin_status_code} || 1;
+    $self->set_origin_status_code(      $vars->{origin_status_code} || 1);
     $self->{__ORIGINATING_DFI__}       = $vars->{origin_dfi_id} || substr $vars->{destination}, 0, 8;
 
     $self->set_entry_class_code(        $vars->{entry_class_code} || 'PPD');
@@ -65,11 +65,20 @@ sub to_string {
 }
 
 #-------------------------------------------------
+# set_origin_status_code() setter
+#-------------------------------------------------
+sub set_origin_status_code {
+    my ( $self, $p ) = @_;
+    croak "Invalid origin_status_code" unless $p eq '1' || $p eq '2';
+    $self->{__ORIGIN_STATUS_CODE__} = $p;
+}
+
+#-------------------------------------------------
 # set_format_code() setter
 #-------------------------------------------------
 sub set_format_code {
     my ( $self, $p ) = @_;
-    check_length($p, 'format_code');
+    croak "format_code other than 1 is not supported" unless $p eq '1';
     $self->{__FORMAT_CODE__} = $p;
 }
 
@@ -78,7 +87,7 @@ sub set_format_code {
 #-------------------------------------------------
 sub set_blocking_factor {
     my ( $self, $p ) = @_;
-    check_length($p, 'blocking_factor');
+    croak "blocking_factor other than 10 is not supported" unless $p == 10;
     $self->{__BLOCKING_FACTOR__} = $p;
 }
 
@@ -87,7 +96,7 @@ sub set_blocking_factor {
 #-------------------------------------------------
 sub set_record_size {
     my ( $self, $p ) = @_;
-    check_length($p, 'record_size');
+    croak "record_size other than 94 is not supported" unless $p == 94;
     $self->{__RECORD_SIZE__} = $p;
 }
 
@@ -177,7 +186,7 @@ sub set_company_note {
 #-------------------------------------------------
 sub set_service_class_code {
     my ( $self, $p ) = @_;
-    check_length($p, 'service_class_code');
+    croak "Invalid service_class_code" unless $p =~ /^(200|220|225)$/;
     $self->{__SERVICE_CLASS_CODE__} = $p;
 }
 
@@ -225,18 +234,17 @@ sub make_batch {
         croak 'amount cannot be negative' if $record->{amount} < 0;
 
         if ($record->{transaction_code} =~ /^(27|37)$/) {
-           #if it is a debit
-           $self->{__BATCH_TOTAL_DEBIT__} += $record->{amount};
-           $self->{__DEBIT_AMOUNT__} += $record->{amount};
-           $self->{__TOTAL_DEBIT__} += $record->{amount};
-
+            croak "Debits cannot be used with service_class_code 220" if $self->{__SERVICE_CLASS_CODE__} eq '220';
+            $self->{__BATCH_TOTAL_DEBIT__} += $record->{amount};
+            $self->{__DEBIT_AMOUNT__} += $record->{amount};
+            $self->{__TOTAL_DEBIT__} += $record->{amount};
         } elsif ($record->{transaction_code} =~ /^(22|32)$/ ) {
-           #if it is a credit
-           $self->{__BATCH_TOTAL_CREDIT__} += $record->{amount};
-           $self->{__CREDIT_AMOUNT__} += $record->{amount};
-           $self->{__TOTAL_CREDIT__} += $record->{amount};
+            croak "Credits cannot be used with service_class_code 220" if $self->{__SERVICE_CLASS_CODE__} eq '225';
+            $self->{__BATCH_TOTAL_CREDIT__} += $record->{amount};
+            $self->{__CREDIT_AMOUNT__} += $record->{amount};
+            $self->{__TOTAL_CREDIT__} += $record->{amount};
         } else {
-           croak 'unsupported transaction_code';
+            croak 'unsupported transaction_code';
         }
 
         # modify batch values
@@ -374,28 +382,28 @@ sub format_rules {
     return( {
         customer_name       => '%-22.22s',
         customer_acct       => '%-15.15s',
-        amount              => '%010s',
+        amount              => '%010.10s',
         bank_2              => '%-2.2s',
         transaction_type    => '%-2.2s',
         bank_15             => '%-15.15s',
-        addenda             => '%-1.1s',
+        addenda             => '%01.1s',
         trace_num           => '%-15.15s',
         transaction_code    => '%-2.2s',
-        record_type         => '%-1.1s',
+        record_type         => '%1.1s',
         bank_account        => '%-17.17s',
-        routing_number      => '%09s',
+        routing_number      => '%09.9s',
 
-        record_type         => '%-1.1s',
+        record_type         => '%1.1s',
 
-        priority_code       => '%02s',
+        priority_code       => '%02.2s',
         immediate_dest      => '%10.10s',
         immediate_origin    => '%10.10s',
         date                => '%-6.6s',
         time                => '%-4.4s',
-        file_id_modifier    => '%-1.1s',
-        record_size         => '%03s',
-        blocking_factor     => '%02s',
-        format_code         => '%-1.1s',
+        file_id_modifier    => '%1.1s',
+        record_size         => '%03.3s',
+        blocking_factor     => '%02.2s',
+        format_code         => '%1.1s',
         immediate_dest_name => '%-23.23s',
         immediate_origin_name => '%-23.23s',
         reference_code        => '%-8.8s',
@@ -410,7 +418,7 @@ sub format_rules {
         settlement_date       => '%-3.3s',  # for bank
         origin_status_code    => '%-1.1s',  # for bank
         origin_dfi_id         => '%-8.8s',  # for bank
-        batch_number          => '%07s',
+        batch_number          => '%07.7s',
 
         entry_count           => '%06s',
         entry_hash            => '%010s',
@@ -524,7 +532,7 @@ sub _make_batch_header_record {
 
     my $data = {
         record_type         => 5,
-        service_class_code  => 200,
+        service_class_code  => $self->{__SERVICE_CLASS_CODE__},
         company_name        => $self->{__COMPANY_NAME__},
         company_note        => $self->{__COMPANY_NOTE__},
         company_id          => $self->{__COMPANY_ID__},
@@ -733,7 +741,20 @@ Returns the built ACH file.
 
 =over 4
 
+=item set_origin_status_code
+
+The code must be either:
+
+ 1 - Originator is a financial institution bound by the NACHA rules (the default)
+ 2 - Originator is a federal agency not bound by the NACHA rules
+
 =item set_service_class_code
+
+The code must be one of:
+
+ 200 - Mixed credits and debits (the default)
+ 220 - Credits only
+ 225 - Debits only
 
 =item set_immediate_dest_name
 
