@@ -35,7 +35,7 @@ sub new {
     $self->{__IMMEDIATE_DEST__}        = $vars->{destination};
     $self->{__IMMEDIATE_ORIGIN__}      = $vars->{origination};
     $self->{__ORIGIN_STATUS_CODE__}    = $vars->{origin_status_code};
-    $self->{__ORIGINATING_DFI__}       = $vars->{originating_dfi} || substr $vars->{destination}, 0, 8;
+    $self->{__ORIGINATING_DFI__}       = $vars->{origin_dfi_id} || substr $vars->{destination}, 0, 8;
 
     $self->{__ENTRY_CLASS_CODE__}      = $vars->{entry_class_code} || 'PPD';
     $self->{__ENTRY_DESCRIPTION__}     = $vars->{entry_description};
@@ -712,7 +712,7 @@ The C<make_batch> function expects entry detail records in this format:
    customer_name    => 'JOHN SMITH',   # Maximum of 22 characters
    customer_acct    => '0000-0111111', # Maximum of 15 characters
    amount           => '2501',         # In whole cents; this is $25.01
-   routing_number   => '10010101',     # 8 digits
+   routing_number   => '10010101',     # 9 digits
    bank_account     => '103030030',    # Maximum of 17 characters
    transaction_code => '27',
  }
