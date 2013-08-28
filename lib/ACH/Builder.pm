@@ -17,7 +17,7 @@ sub new {
     my $self = {};
     bless( $self, $class );
 
-    # set default values
+    # Collapse given and default values
     $self->{__BATCH_COUNT__}           = 0;
     $self->{__BLOCK_COUNT__}           = 0;
     $self->{__ENTRY_COUNT__}           = 0;
@@ -39,21 +39,20 @@ sub new {
     $self->{__ORIGIN_STATUS_CODE__}    = $vars->{origin_status_code} || 1;
     $self->{__ORIGINATING_DFI__}       = $vars->{origin_dfi_id} || substr $vars->{destination}, 0, 8;
 
-    $self->{__ENTRY_CLASS_CODE__}      = $vars->{entry_class_code} || 'PPD';
-    $self->{__ENTRY_DESCRIPTION__}     = $vars->{entry_description};
-    $self->{__COMPANY_ID__}            = $vars->{company_id};
+    $self->set_entry_class_code(        $vars->{entry_class_code} || 'PPD');
+    $self->set_entry_description(       $vars->{entry_description});
+    $self->set_company_id(              $vars->{company_id});
     $self->{__COMPANY_NAME__}          = $vars->{company_name};
-    $self->{__COMPANY_NOTE__}          = $vars->{company_note};
+    $self->set_company_note(            $vars->{company_note});
 
-    $self->{__FILE_ID_MODIFIER__}      = $vars->{file_id_modifier} || 'A';
-    $self->{__RECORD_SIZE__}           = $vars->{record_size}      || 94;
-    $self->{__BLOCKING_FACTOR__}       = $vars->{blocking_factor}  || 10;
-    $self->{__FORMAT_CODE__}           = $vars->{format_code}      || 1;
+    $self->set_file_id_modifier(        $vars->{file_id_modifier} || 'A');
+    $self->set_record_size(             $vars->{record_size}      || 94);
+    $self->set_blocking_factor(         $vars->{blocking_factor}  || 10);
+    $self->set_format_code(             $vars->{format_code}      || 1);
     $self->{__EFFECTIVE_DATE__}        = $vars->{effective_date}   || strftime( "%y%m%d", localtime( time + 86400 ) );
 
     $self->{__ACH_DATA__}              = [];
 
-    # populate self with data from site
     return( $self );
 }
 
@@ -70,6 +69,7 @@ sub to_string {
 #-------------------------------------------------
 sub set_format_code {
     my ( $self, $p ) = @_;
+    check_length($p, 'format_code');
     $self->{__FORMAT_CODE__} = $p;
 }
 
@@ -78,6 +78,7 @@ sub set_format_code {
 #-------------------------------------------------
 sub set_blocking_factor {
     my ( $self, $p ) = @_;
+    check_length($p, 'blocking_factor');
     $self->{__BLOCKING_FACTOR__} = $p;
 }
 
@@ -86,6 +87,7 @@ sub set_blocking_factor {
 #-------------------------------------------------
 sub set_record_size {
     my ( $self, $p ) = @_;
+    check_length($p, 'record_size');
     $self->{__RECORD_SIZE__} = $p;
 }
 
@@ -94,6 +96,7 @@ sub set_record_size {
 #-------------------------------------------------
 sub set_file_id_modifier {
     my ( $self, $p ) = @_;
+    check_length($p, 'file_id_modifier');
     $self->{__FILE_ID_MODIFIER__} = $p;
 }
 
@@ -102,6 +105,7 @@ sub set_file_id_modifier {
 #-------------------------------------------------
 sub set_immediate_origin_name {
     my ( $self, $p ) = @_;
+    check_length($p, 'immediate_origin_name');
     $self->{__IMMEDIATE_ORIGIN_NAME__} = $p;
 }
 
@@ -110,6 +114,7 @@ sub set_immediate_origin_name {
 #-------------------------------------------------
 sub set_immediate_origin {
     my ( $self, $p ) = @_;
+    check_length($p, 'immediate_origin');
     $self->{__IMMEDIATE_ORIGIN__} = $p;
 }
 
@@ -118,6 +123,7 @@ sub set_immediate_origin {
 #-------------------------------------------------
 sub set_immediate_dest_name {
     my ( $self, $p ) = @_;
+    check_length($p, 'immediate_dest_name');
     $self->{__IMMEDIATE_DEST_NAME__} = $p;
 }
 
@@ -126,6 +132,7 @@ sub set_immediate_dest_name {
 #-------------------------------------------------
 sub set_immediate_dest {
     my ( $self, $p ) = @_;
+    check_length($p, 'immediate_dest');
     $self->{__IMMEDIATE_DEST__} = $p;
 }
 
@@ -134,6 +141,7 @@ sub set_immediate_dest {
 #-------------------------------------------------
 sub set_entry_description {
     my ( $self, $p ) = @_;
+    check_length($p, 'entry_description');
     $self->{__ENTRY_DESCRIPTION__} = $p;
 }
 
@@ -142,6 +150,7 @@ sub set_entry_description {
 #-------------------------------------------------
 sub set_entry_class_code {
     my ( $self, $p ) = @_;
+    check_length($p, 'entry_class_code');
     $self->{__ENTRY_CLASS_CODE__} = $p;
 }
 
@@ -150,6 +159,7 @@ sub set_entry_class_code {
 #-------------------------------------------------
 sub set_company_id {
     my ( $self, $p ) = @_;
+    check_length($p, 'company_id');
     $self->{__COMPANY_ID__} = $p;
 }
 
@@ -158,6 +168,7 @@ sub set_company_id {
 #-------------------------------------------------
 sub set_company_note {
     my ( $self, $p ) = @_;
+    check_length($p, 'company_note');
     $self->{__COMPANY_NOTE__} = $p;
 }
 
@@ -166,7 +177,18 @@ sub set_company_note {
 #-------------------------------------------------
 sub set_service_class_code {
     my ( $self, $p ) = @_;
+    check_length($p, 'service_class_code');
     $self->{__SERVICE_CLASS_CODE__} = $p;
+}
+
+sub check_length {
+    my ($p, $field) = @_;
+    my $rules = format_rules();
+    carp "Field '$field' not found in format rules!" and return unless $rules->{$field};
+    (my $length = $rules->{$field}) =~ s/^%-?0*(\d+).*/$1/;
+    carp "Value '$p' for field $field will be truncated to '".sprintf($rules->{$field}, $p)."'!"
+        and return 0 if length $p > $length;
+    return 1;
 }
 
 #-------------------------------------------------
@@ -377,10 +399,10 @@ sub format_rules {
 
         service_class_code    => '%-3.3s',
         company_name          => '%-16.16s',
-        company_note_data     => '%-20.20s',
+        company_note          => '%-20.20s',
         company_id            => '%-10.10s',
-        standard_entry_class_code => '%-3.3s',
-        company_entry_descr   => '%-10.10s',
+        entry_class_code      => '%-3.3s',
+        entry_description     => '%-10.10s',
         effective_date        => '%-6.6s',
         settlement_date       => '%-3.3s',  # for bank
         origin_status_code    => '%-1.1s',  # for bank
@@ -482,10 +504,10 @@ sub _make_batch_header_record {
         record_type
         service_class_code
         company_name
-        company_note_data
+        company_note
         company_id
-        standard_entry_class_code
-        company_entry_descr
+        entry_class_code
+        entry_description
         date
         effective_date
         settlement_date
@@ -498,10 +520,10 @@ sub _make_batch_header_record {
         record_type         => 5,
         service_class_code  => 200,
         company_name        => $self->{__COMPANY_NAME__},
-        company_note_data   => $self->{__COMPANY_NOTE__},
+        company_note        => $self->{__COMPANY_NOTE__},
         company_id          => $self->{__COMPANY_ID__},
-        standard_entry_class_code => $self->{__ENTRY_CLASS_CODE__},
-        company_entry_descr => $self->{__ENTRY_DESCRIPTION__},
+        entry_class_code => $self->{__ENTRY_CLASS_CODE__},
+        entry_description => $self->{__ENTRY_DESCRIPTION__},
         date                => strftime( "%y%m%d", localtime(time) ),
         effective_date      => $self->{__EFFECTIVE_DATE__},
         settlement_date     => '',
@@ -530,7 +552,7 @@ sub fixedlength {
 
     my $fmt_string;
     foreach my $field ( @$order ) {
-        croak "Format for the field $field was not defined\n"
+        croak "Format for the field $field was not defined"
             unless defined $format->{$field};
 
         carp "data for $field is not defined"
