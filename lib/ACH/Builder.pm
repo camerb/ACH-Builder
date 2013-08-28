@@ -187,6 +187,394 @@ sub new {
 
 =pod
 
+=head2 make_file_header_record( )
+
+Adds the file header record. This can only be called once and must be
+called before any batches are added with C<make_batch>.
+
+=cut
+
+sub make_file_header_record {
+    my( $self ) = @_;
+
+    # ach file header definition
+    my @def = qw(
+        record_type
+        priority_code
+        immediate_dest
+        immediate_origin
+        date
+        time
+        file_id_modifier
+        record_size
+        blocking_factor
+        format_code
+        immediate_dest_name
+        immediate_origin_name
+        reference_code
+    );
+
+    my $data = {
+        record_type         => 1,
+        priority_code       => 1,
+        immediate_dest      => $self->{__IMMEDIATE_DEST__},
+        immediate_origin    => $self->{__IMMEDIATE_ORIGIN__},
+        date                => strftime( "%y%m%d", localtime(time) ),
+        time                => strftime( "%H%M", localtime(time) ),
+        file_id_modifier    => $self->{__FILE_ID_MODIFIER__},
+        record_size         => $self->{__RECORD_SIZE__},
+        blocking_factor     => $self->{__BLOCKING_FACTOR__},
+        format_code         => $self->{__FORMAT_CODE__},
+        immediate_dest_name   => $self->{__IMMEDIATE_DEST_NAME__},
+        immediate_origin_name => $self->{__IMMEDIATE_ORIGIN_NAME__},
+        reference_code        => '',
+    };
+
+    push( @{ $self->ach_data() },
+        fixedlength( $self->format_rules, $data,  \@def  )
+    );
+}
+
+=pod
+
+=head2 sample_detail_records( )
+
+Returns a list of sample records ready for C<make_batch>. See above for format details.
+
+=cut
+
+sub sample_detail_records {
+    my( $self ) = shift;
+
+    my @records;
+
+    push( @records, {
+        customer_name       => 'JOHN SMITH',
+        customer_acct       => sprintf( "%010d", '6124' )
+            . sprintf( "%08d", '2882282' ),
+        amount              => '2501',
+        routing_number      => '010010101',
+        bank_account        => '103030030',
+    } );
+
+    push( @records, {
+        customer_name       => 'JOHN SMITHSTIMTIMSTIMSIMSIMS',
+        customer_acct       => sprintf( "%010d", '4124' )
+                . sprintf( "%08d", '4882282' ),
+        amount              => '40801',
+        routing_number      => '010010401',
+        bank_account        => '440030030',
+    } );
+
+    return @records;
+}
+
+=pod
+
+=head2 make_batch( @$records )
+
+Adds a batch of records to the file. You must have called
+C<make_file_header_record> before adding a batch to the file.
+
+=cut
+
+sub make_batch {
+    my ( $self, $records ) = @_;
+
+    return unless ref $records eq 'ARRAY' && @$records;
+
+    # bump the batch count
+    ++$self->{__BATCH_COUNT__};
+
+    # inititalize the batch variables
+    $self->{__BATCH_TOTAL_DEBIT__}  = 0;
+    $self->{__BATCH_TOTAL_CREDIT__} = 0;
+    $self->{__BATCH_ENTRY_COUNT__}  = 0;
+    $self->{__BATCH_ENTRY_HASH__}   = 0;
+
+    # get batch header
+    $self->_make_batch_header_record();
+
+    # loop over the detail records
+    foreach my $record ( @{ $records } ) {
+
+        croak 'amount cannot be negative' if $record->{amount} < 0;
+
+        if ($record->{transaction_code} =~ /^(27|37)$/) {
+            croak "Debits cannot be used with service_class_code 220" if $self->{__SERVICE_CLASS_CODE__} eq '220';
+            $self->{__BATCH_TOTAL_DEBIT__} += $record->{amount};
+            $self->{__DEBIT_AMOUNT__} += $record->{amount};
+            $self->{__TOTAL_DEBIT__} += $record->{amount};
+        } elsif ($record->{transaction_code} =~ /^(22|32)$/ ) {
+            croak "Credits cannot be used with service_class_code 220" if $self->{__SERVICE_CLASS_CODE__} eq '225';
+            $self->{__BATCH_TOTAL_CREDIT__} += $record->{amount};
+            $self->{__CREDIT_AMOUNT__} += $record->{amount};
+            $self->{__TOTAL_CREDIT__} += $record->{amount};
+        } else {
+            croak 'unsupported transaction_code';
+        }
+
+        # modify batch values
+        # Hash is calculated without the MICR checksum digit
+        $self->{__BATCH_ENTRY_HASH__} += substr $record->{routing_number}, 0, 8;
+        ++$self->{__BATCH_ENTRY_COUNT__};
+
+        # modify file values
+        $self->{__ENTRY_HASH__} += substr $record->{routing_number}, 0, 8;
+        ++$self->{__ENTRY_COUNT__};
+
+        # get detail record
+        $self->_make_detail_record( $record )
+    }
+
+    # get batch control record
+    $self->_make_batch_control_record();
+}
+
+# For internal use only. Formats a detail record and adds it to the ACH data.
+sub _make_detail_record {
+    my( $self, $record ) = @_;
+
+    my @def = qw(
+        record_type
+        transaction_code
+        routing_number
+        bank_account
+        amount
+        customer_acct
+        customer_name
+        transaction_type
+        addenda
+        bank_15
+    );
+
+    # add to record unless already defined
+    $record->{record_type}      ||= 6;
+    $record->{transaction_code} ||= 27;
+    $record->{transaction_type} ||= 'S';
+    $record->{bank_15}          ||= '';
+    $record->{addenda}          ||= 0;
+
+    # stash detail record
+    push( @{ $self->ach_data() },
+        fixedlength( $self->format_rules(), $record, \@def )
+    );
+}
+
+# For internal use only. Starts a batch of detail records.
+sub _make_batch_header_record {
+    my( $self ) = @_;
+
+    my @def    = qw(
+        record_type
+        service_class_code
+        company_name
+        company_note
+        company_id
+        entry_class_code
+        entry_description
+        date
+        effective_date
+        settlement_date
+        origin_status_code
+        origin_dfi_id
+        batch_number
+    );
+
+    my $data = {
+        record_type         => 5,
+        service_class_code  => $self->{__SERVICE_CLASS_CODE__},
+        company_name        => $self->{__COMPANY_NAME__},
+        company_note        => $self->{__COMPANY_NOTE__},
+        company_id          => $self->{__COMPANY_ID__},
+        entry_class_code => $self->{__ENTRY_CLASS_CODE__},
+        entry_description => $self->{__ENTRY_DESCRIPTION__},
+        date                => strftime( "%y%m%d", localtime(time) ),
+        effective_date      => $self->{__EFFECTIVE_DATE__},
+        settlement_date     => '',
+        origin_status_code  => $self->{__ORIGIN_STATUS_CODE__},
+        origin_dfi_id       => $self->{__ORIGINATING_DFI__},
+        batch_number        => $self->{__BATCH_COUNT__},
+        authen_code         => '',
+        bank_6              => '',
+    };
+
+    push( @{ $self->ach_data() },
+        fixedlength( $self->format_rules(), $data, \@def )
+    );
+}
+
+# For internal use only. Closes out a batch of detail records.
+sub _make_batch_control_record {
+    my( $self ) = @_;
+
+    my @def = qw(
+        record_type
+        service_class_code
+        entry_count
+        entry_hash
+        total_debit_amount
+        total_credit_amount
+        company_id
+        authen_code
+        bank_6
+        origin_dfi_id
+        batch_number
+    );
+
+    my $data = {
+        record_type         => 8,
+        service_class_code  => $self->{__SERVICE_CLASS_CODE__},
+        company_id          => $self->{__COMPANY_ID__},
+        origin_dfi_id       => $self->{__ORIGINATING_DFI__},
+        batch_number        => $self->{__BATCH_COUNT__},
+        authen_code         => '',
+        bank_6              => '',
+        entry_hash          => $self->{__BATCH_ENTRY_HASH__},
+        entry_count         => $self->{__BATCH_ENTRY_COUNT__},
+        total_debit_amount  => $self->{__BATCH_TOTAL_DEBIT__},
+        total_credit_amount => $self->{__BATCH_TOTAL_CREDIT__},
+    };
+
+    # Truncate leftmost digits of entry hash
+    $data->{entry_hash} = substr($data->{entry_hash}, length($data->{entry_hash}) - 10, 10) if length($data->{entry_hash}) > 10;
+
+    push( @{ $self->ach_data() },
+        fixedlength( $self->format_rules(), $data, \@def )
+    );
+}
+
+=pod
+
+=head2 make_file_control_record( )
+
+Adds the file control record, finishing the file. This can only be called
+once. Afterward, the ACH file can be retrieved in its entirety with C<to_string>.
+
+=cut
+
+sub make_file_control_record {
+    my( $self ) = @_;
+
+    my @def = qw(
+       record_type
+       batch_count
+       block_count
+       file_entry_count
+       entry_hash
+       total_debit_amount
+       total_credit_amount
+       bank_39
+    );
+
+    my $data = {
+        record_type            => 9,
+        batch_count            => $self->{__BATCH_COUNT__},
+        block_count            => $self->{__BLOCK_COUNT__},
+        file_entry_count       => $self->{__ENTRY_COUNT__},
+        entry_hash             => $self->{__ENTRY_HASH__},
+        total_debit_amount     => $self->{__DEBIT_AMOUNT__},
+        total_credit_amount    => $self->{__CREDIT_AMOUNT__},
+        bank_39                => '',
+    };
+
+    # Truncate leftmost digits of entry hash
+    $data->{entry_hash} = substr($data->{entry_hash}, length($data->{entry_hash}) - 10, 10) if length($data->{entry_hash}) > 10;
+
+    push( @{ $self->ach_data() },
+        fixedlength( $self->format_rules(), $data, \@def )
+    );
+}
+
+=pod
+
+=head2 format_rules( )
+
+Returns a hash of ACH format rules. Used internally to generate the
+fixed-width format required for output.
+
+=cut
+
+sub format_rules {
+    my( $self ) = @_;
+
+    return( {
+        customer_name       => '%-22.22s',
+        customer_acct       => '%-15.15s',
+        amount              => '%010.10s',
+        bank_2              => '%-2.2s',
+        transaction_type    => '%-2.2s',
+        bank_15             => '%-15.15s',
+        addenda             => '%01.1s',
+        trace_num           => '%-15.15s',
+        transaction_code    => '%-2.2s',
+        record_type         => '%1.1s',
+        bank_account        => '%-17.17s',
+        routing_number      => '%09.9s',
+
+        record_type         => '%1.1s',
+
+        priority_code       => '%02.2s',
+        immediate_dest      => '%10.10s',
+        immediate_origin    => '%10.10s',
+        date                => '%-6.6s',
+        time                => '%-4.4s',
+        file_id_modifier    => '%1.1s',
+        record_size         => '%03.3s',
+        blocking_factor     => '%02.2s',
+        format_code         => '%1.1s',
+        immediate_dest_name => '%-23.23s',
+        immediate_origin_name => '%-23.23s',
+        reference_code        => '%-8.8s',
+
+        service_class_code    => '%-3.3s',
+        company_name          => '%-16.16s',
+        company_note          => '%-20.20s',
+        company_id            => '%-10.10s',
+        entry_class_code      => '%-3.3s',
+        entry_description     => '%-10.10s',
+        effective_date        => '%-6.6s',
+        settlement_date       => '%-3.3s',  # for bank
+        origin_status_code    => '%-1.1s',  # for bank
+        origin_dfi_id         => '%-8.8s',  # for bank
+        batch_number          => '%07.7s',
+
+        entry_count           => '%06s',
+        entry_hash            => '%010s',
+        total_debit_amount    => '%012s',
+        total_credit_amount   => '%012s',
+        authen_code           => '%-19.19s',
+        bank_6                => '%-6.6s',
+
+        batch_count            => '%06s',
+        block_count            => '%06s',
+        file_entry_count       => '%08s',
+        bank_39                => '%-39.39s',
+    } );
+}
+
+# For internal use only. Formats a record according to format_rules.
+sub fixedlength {
+    my( $format, $data, $order ) = @_;
+
+    my $fmt_string;
+    foreach my $field ( @$order ) {
+        croak "Format for the field $field was not defined"
+            unless defined $format->{$field};
+
+        carp "data for $field is not defined"
+            unless defined $data->{$field};
+
+        $data->{$field} ||= "";
+
+        $fmt_string .= sprintf $format->{$field}, $data->{$field};
+    }
+
+    return $fmt_string;
+}
+
+=pod
+
 =head2 to_string( )
 
 Returns the built ACH file.
@@ -196,6 +584,19 @@ Returns the built ACH file.
 sub to_string {
     my $self = shift;
     return( join( "\n", @{ $self->{__ACH_DATA__} } ) );
+}
+
+=pod
+
+=head2 ach_data( )
+
+Returns as an arrayref the formatted lines that will be turned into the ACH file.
+
+=cut
+
+sub ach_data {
+    my ( $self ) = shift;
+    $self->{__ACH_DATA__};
 }
 
 =pod
@@ -424,407 +825,6 @@ sub check_length {
     carp "Value '$p' for field $field will be truncated to '".sprintf($rules->{$field}, $p)."'!"
         and return 0 if length $p > $length;
     return 1;
-}
-
-=pod
-
-=head2 ach_data( )
-
-Returns as an arrayref the formatted lines that will be turned into the ACH file.
-
-=cut
-
-sub ach_data {
-    my ( $self ) = shift;
-    $self->{__ACH_DATA__};
-}
-
-=pod
-
-=head2 make_batch( @$records )
-
-Adds a batch of records to the file. You must have called
-C<make_file_header_record> before adding a batch to the file.
-
-=cut
-
-sub make_batch {
-    my ( $self, $records ) = @_;
-
-    return unless ref $records eq 'ARRAY' && @$records;
-
-    # bump the batch count
-    ++$self->{__BATCH_COUNT__};
-
-    # inititalize the batch variables
-    $self->{__BATCH_TOTAL_DEBIT__}  = 0;
-    $self->{__BATCH_TOTAL_CREDIT__} = 0;
-    $self->{__BATCH_ENTRY_COUNT__}  = 0;
-    $self->{__BATCH_ENTRY_HASH__}   = 0;
-
-    # get batch header
-    $self->_make_batch_header_record();
-
-    # loop over the detail records
-    foreach my $record ( @{ $records } ) {
-
-        croak 'amount cannot be negative' if $record->{amount} < 0;
-
-        if ($record->{transaction_code} =~ /^(27|37)$/) {
-            croak "Debits cannot be used with service_class_code 220" if $self->{__SERVICE_CLASS_CODE__} eq '220';
-            $self->{__BATCH_TOTAL_DEBIT__} += $record->{amount};
-            $self->{__DEBIT_AMOUNT__} += $record->{amount};
-            $self->{__TOTAL_DEBIT__} += $record->{amount};
-        } elsif ($record->{transaction_code} =~ /^(22|32)$/ ) {
-            croak "Credits cannot be used with service_class_code 220" if $self->{__SERVICE_CLASS_CODE__} eq '225';
-            $self->{__BATCH_TOTAL_CREDIT__} += $record->{amount};
-            $self->{__CREDIT_AMOUNT__} += $record->{amount};
-            $self->{__TOTAL_CREDIT__} += $record->{amount};
-        } else {
-            croak 'unsupported transaction_code';
-        }
-
-        # modify batch values
-        # Hash is calculated without the MICR checksum digit
-        $self->{__BATCH_ENTRY_HASH__} += substr $record->{routing_number}, 0, 8;
-        ++$self->{__BATCH_ENTRY_COUNT__};
-
-        # modify file values
-        $self->{__ENTRY_HASH__} += substr $record->{routing_number}, 0, 8;
-        ++$self->{__ENTRY_COUNT__};
-
-        # get detail record
-        $self->_make_detail_record( $record )
-    }
-
-    # get batch control record
-    $self->_make_batch_control_record();
-}
-
-=pod
-
-=head2 make_file_control_record( )
-
-Adds the file control record, finishing the file. This can only be called
-once. Afterward, the ACH file can be retrieved in its entirety with C<to_string>.
-
-=cut
-
-sub make_file_control_record {
-    my( $self ) = @_;
-
-    my @def = qw(
-       record_type
-       batch_count
-       block_count
-       file_entry_count
-       entry_hash
-       total_debit_amount
-       total_credit_amount
-       bank_39
-    );
-
-    my $data = {
-        record_type            => 9,
-        batch_count            => $self->{__BATCH_COUNT__},
-        block_count            => $self->{__BLOCK_COUNT__},
-        file_entry_count       => $self->{__ENTRY_COUNT__},
-        entry_hash             => $self->{__ENTRY_HASH__},
-        total_debit_amount     => $self->{__DEBIT_AMOUNT__},
-        total_credit_amount    => $self->{__CREDIT_AMOUNT__},
-        bank_39                => '',
-    };
-
-    # Truncate leftmost digits of entry hash
-    $data->{entry_hash} = substr($data->{entry_hash}, length($data->{entry_hash}) - 10, 10) if length($data->{entry_hash}) > 10;
-
-    push( @{ $self->ach_data() },
-        fixedlength( $self->format_rules(), $data, \@def )
-    );
-}
-
-=pod
-
-=head2 make_file_header_record( )
-
-Adds the file header record. This can only be called once and must be
-called before any batches are added with C<make_batch>.
-
-=cut
-
-sub make_file_header_record {
-    my( $self ) = @_;
-
-    # ach file header definition
-    my @def = qw(
-        record_type
-        priority_code
-        immediate_dest
-        immediate_origin
-        date
-        time
-        file_id_modifier
-        record_size
-        blocking_factor
-        format_code
-        immediate_dest_name
-        immediate_origin_name
-        reference_code
-    );
-
-    my $data = {
-        record_type         => 1,
-        priority_code       => 1,
-        immediate_dest      => $self->{__IMMEDIATE_DEST__},
-        immediate_origin    => $self->{__IMMEDIATE_ORIGIN__},
-        date                => strftime( "%y%m%d", localtime(time) ),
-        time                => strftime( "%H%M", localtime(time) ),
-        file_id_modifier    => $self->{__FILE_ID_MODIFIER__},
-        record_size         => $self->{__RECORD_SIZE__},
-        blocking_factor     => $self->{__BLOCKING_FACTOR__},
-        format_code         => $self->{__FORMAT_CODE__},
-        immediate_dest_name   => $self->{__IMMEDIATE_DEST_NAME__},
-        immediate_origin_name => $self->{__IMMEDIATE_ORIGIN_NAME__},
-        reference_code        => '',
-    };
-
-    push( @{ $self->ach_data() },
-        fixedlength( $self->format_rules, $data,  \@def  )
-    );
-}
-
-=pod
-
-=head2 sample_detail_records( )
-
-Returns a list of sample records ready for C<make_batch>. See above for format details.
-
-=cut
-
-sub sample_detail_records {
-    my( $self ) = shift;
-
-    my @records;
-
-    push( @records, {
-        customer_name       => 'JOHN SMITH',
-        customer_acct       => sprintf( "%010d", '6124' )
-            . sprintf( "%08d", '2882282' ),
-        amount              => '2501',
-        routing_number      => '010010101',
-        bank_account        => '103030030',
-    } );
-
-    push( @records, {
-        customer_name       => 'JOHN SMITHSTIMTIMSTIMSIMSIMS',
-        customer_acct       => sprintf( "%010d", '4124' )
-                . sprintf( "%08d", '4882282' ),
-        amount              => '40801',
-        routing_number      => '010010401',
-        bank_account        => '440030030',
-    } );
-
-    return @records;
-}
-
-=pod
-
-=head2 format_rules( )
-
-Returns a hash of ACH format rules. Used internally to generate the
-fixed-width format required for output.
-
-=cut
-
-sub format_rules {
-    my( $self ) = @_;
-
-    return( {
-        customer_name       => '%-22.22s',
-        customer_acct       => '%-15.15s',
-        amount              => '%010.10s',
-        bank_2              => '%-2.2s',
-        transaction_type    => '%-2.2s',
-        bank_15             => '%-15.15s',
-        addenda             => '%01.1s',
-        trace_num           => '%-15.15s',
-        transaction_code    => '%-2.2s',
-        record_type         => '%1.1s',
-        bank_account        => '%-17.17s',
-        routing_number      => '%09.9s',
-
-        record_type         => '%1.1s',
-
-        priority_code       => '%02.2s',
-        immediate_dest      => '%10.10s',
-        immediate_origin    => '%10.10s',
-        date                => '%-6.6s',
-        time                => '%-4.4s',
-        file_id_modifier    => '%1.1s',
-        record_size         => '%03.3s',
-        blocking_factor     => '%02.2s',
-        format_code         => '%1.1s',
-        immediate_dest_name => '%-23.23s',
-        immediate_origin_name => '%-23.23s',
-        reference_code        => '%-8.8s',
-
-        service_class_code    => '%-3.3s',
-        company_name          => '%-16.16s',
-        company_note          => '%-20.20s',
-        company_id            => '%-10.10s',
-        entry_class_code      => '%-3.3s',
-        entry_description     => '%-10.10s',
-        effective_date        => '%-6.6s',
-        settlement_date       => '%-3.3s',  # for bank
-        origin_status_code    => '%-1.1s',  # for bank
-        origin_dfi_id         => '%-8.8s',  # for bank
-        batch_number          => '%07.7s',
-
-        entry_count           => '%06s',
-        entry_hash            => '%010s',
-        total_debit_amount    => '%012s',
-        total_credit_amount   => '%012s',
-        authen_code           => '%-19.19s',
-        bank_6                => '%-6.6s',
-
-        batch_count            => '%06s',
-        block_count            => '%06s',
-        file_entry_count       => '%08s',
-        bank_39                => '%-39.39s',
-    } );
-}
-
-# For internal use only. Closes out a batch of detail records.
-sub _make_batch_control_record {
-    my( $self ) = @_;
-
-    my @def = qw(
-        record_type
-        service_class_code
-        entry_count
-        entry_hash
-        total_debit_amount
-        total_credit_amount
-        company_id
-        authen_code
-        bank_6
-        origin_dfi_id
-        batch_number
-    );
-
-    my $data = {
-        record_type         => 8,
-        service_class_code  => $self->{__SERVICE_CLASS_CODE__},
-        company_id          => $self->{__COMPANY_ID__},
-        origin_dfi_id       => $self->{__ORIGINATING_DFI__},
-        batch_number        => $self->{__BATCH_COUNT__},
-        authen_code         => '',
-        bank_6              => '',
-        entry_hash          => $self->{__BATCH_ENTRY_HASH__},
-        entry_count         => $self->{__BATCH_ENTRY_COUNT__},
-        total_debit_amount  => $self->{__BATCH_TOTAL_DEBIT__},
-        total_credit_amount => $self->{__BATCH_TOTAL_CREDIT__},
-    };
-
-    # Truncate leftmost digits of entry hash
-    $data->{entry_hash} = substr($data->{entry_hash}, length($data->{entry_hash}) - 10, 10) if length($data->{entry_hash}) > 10;
-
-    push( @{ $self->ach_data() },
-        fixedlength( $self->format_rules(), $data, \@def )
-    );
-}
-
-# For internal use only. Formats a detail record and adds it to the ACH data.
-sub _make_detail_record {
-    my( $self, $record ) = @_;
-
-    my @def = qw(
-        record_type
-        transaction_code
-        routing_number
-        bank_account
-        amount
-        customer_acct
-        customer_name
-        transaction_type
-        addenda
-        bank_15
-    );
-
-    # add to record unless already defined
-    $record->{record_type}      ||= 6;
-    $record->{transaction_code} ||= 27;
-    $record->{transaction_type} ||= 'S';
-    $record->{bank_15}          ||= '';
-    $record->{addenda}          ||= 0;
-
-    # stash detail record
-    push( @{ $self->ach_data() },
-        fixedlength( $self->format_rules(), $record, \@def )
-    );
-}
-
-# For internal use only. Starts a batch of detail records.
-sub _make_batch_header_record {
-    my( $self ) = @_;
-
-    my @def    = qw(
-        record_type
-        service_class_code
-        company_name
-        company_note
-        company_id
-        entry_class_code
-        entry_description
-        date
-        effective_date
-        settlement_date
-        origin_status_code
-        origin_dfi_id
-        batch_number
-    );
-
-    my $data = {
-        record_type         => 5,
-        service_class_code  => $self->{__SERVICE_CLASS_CODE__},
-        company_name        => $self->{__COMPANY_NAME__},
-        company_note        => $self->{__COMPANY_NOTE__},
-        company_id          => $self->{__COMPANY_ID__},
-        entry_class_code => $self->{__ENTRY_CLASS_CODE__},
-        entry_description => $self->{__ENTRY_DESCRIPTION__},
-        date                => strftime( "%y%m%d", localtime(time) ),
-        effective_date      => $self->{__EFFECTIVE_DATE__},
-        settlement_date     => '',
-        origin_status_code  => $self->{__ORIGIN_STATUS_CODE__},
-        origin_dfi_id       => $self->{__ORIGINATING_DFI__},
-        batch_number        => $self->{__BATCH_COUNT__},
-        authen_code         => '',
-        bank_6              => '',
-    };
-
-    push( @{ $self->ach_data() },
-        fixedlength( $self->format_rules(), $data, \@def )
-    );
-}
-
-# For internal use only. Formats a record according to format_rules.
-sub fixedlength {
-    my( $format, $data, $order ) = @_;
-
-    my $fmt_string;
-    foreach my $field ( @$order ) {
-        croak "Format for the field $field was not defined"
-            unless defined $format->{$field};
-
-        carp "data for $field is not defined"
-            unless defined $data->{$field};
-
-        $data->{$field} ||= "";
-
-        $fmt_string .= sprintf $format->{$field}, $data->{$field};
-    }
-
-    return $fmt_string;
 }
 
 =pod
