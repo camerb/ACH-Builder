@@ -240,11 +240,12 @@ sub make_batch {
         }
 
         # modify batch values
-        $self->{__BATCH_ENTRY_HASH__}  += $record->{routing_number};
+        # Hash is calculated without the MICR checksum digit
+        $self->{__BATCH_ENTRY_HASH__} += substr $record->{routing_number}, 0, 8;
         ++$self->{__BATCH_ENTRY_COUNT__};
 
         # modify file values
-        $self->{__ENTRY_HASH__}  += $record->{routing_number};
+        $self->{__ENTRY_HASH__} += substr $record->{routing_number}, 0, 8;
         ++$self->{__ENTRY_COUNT__};
 
         # get detail record
@@ -283,7 +284,9 @@ sub make_file_control_record {
         bank_39                => '',
     };
 
-    # stash line
+    # Truncate leftmost digits of entry hash
+    $data->{entry_hash} = substr($data->{entry_hash}, length($data->{entry_hash}) - 10, 10) if length($data->{entry_hash}) > 10;
+
     push( @{ $self->ach_data() },
         fixedlength( $self->format_rules(), $data, \@def )
     );
@@ -451,11 +454,14 @@ sub _make_batch_control_record {
         batch_number        => $self->{__BATCH_COUNT__},
         authen_code         => '',
         bank_6              => '',
-        entry_hash          => substr( $self->{__BATCH_ENTRY_HASH__}, 0, 9 ),
+        entry_hash          => $self->{__BATCH_ENTRY_HASH__},
         entry_count         => $self->{__BATCH_ENTRY_COUNT__},
         total_debit_amount  => $self->{__BATCH_TOTAL_DEBIT__},
         total_credit_amount => $self->{__BATCH_TOTAL_CREDIT__},
     };
+
+    # Truncate leftmost digits of entry hash
+    $data->{entry_hash} = substr($data->{entry_hash}, length($data->{entry_hash}) - 10, 10) if length($data->{entry_hash}) > 10;
 
     push( @{ $self->ach_data() },
         fixedlength( $self->format_rules(), $data, \@def )
