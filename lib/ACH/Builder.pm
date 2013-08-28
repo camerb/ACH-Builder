@@ -347,57 +347,57 @@ sub format_rules {
     my( $self ) = @_;
 
     return( {
-        customer_name       => '22L',
-        customer_acct       => '15L',
-        amount              => '10R*D',
-        bank_2              => '2L',
-        transaction_type    => '2L',
-        bank_15             => '15L',
-        addenda             => '1L',
-        trace_num           => '15L',
-        transaction_code    => '2L',
-        record_type         => '1L',
-        bank_account        => '17L',
-        routing_number      => '9R*D',
+        customer_name       => '%-22.22s',
+        customer_acct       => '%-15.15s',
+        amount              => '%010s',
+        bank_2              => '%-2.2s',
+        transaction_type    => '%-2.2s',
+        bank_15             => '%-15.15s',
+        addenda             => '%-1.1s',
+        trace_num           => '%-15.15s',
+        transaction_code    => '%-2.2s',
+        record_type         => '%-1.1s',
+        bank_account        => '%-17.17s',
+        routing_number      => '%09s',
 
-        record_type         => '1L',
+        record_type         => '%-1.1s',
 
-        priority_code       => '2R*D',
-        immediate_dest      => '10R',
-        immediate_origin    => '10R',
-        date                => '6L',
-        time                => '4L',
-        file_id_modifier    => '1L',
-        record_size         => '3R*D',
-        blocking_factor     => '2R*D',
-        format_code         => '1L',
-        immediate_dest_name => '23L',
-        immediate_origin_name => '23L',
-        reference_code        => '8L',
+        priority_code       => '%02s',
+        immediate_dest      => '%10.10s',
+        immediate_origin    => '%10.10s',
+        date                => '%-6.6s',
+        time                => '%-4.4s',
+        file_id_modifier    => '%-1.1s',
+        record_size         => '%03s',
+        blocking_factor     => '%02s',
+        format_code         => '%-1.1s',
+        immediate_dest_name => '%-23.23s',
+        immediate_origin_name => '%-23.23s',
+        reference_code        => '%-8.8s',
 
-        service_class_code    => '3L',
-        company_name          => '16L',
-        company_note_data     => '20L',
-        company_id            => '10L',
-        standard_entry_class_code => '3L',
-        company_entry_descr   => '10L',
-        effective_date        => '6L',
-        settlement_date       => '3L',  # for bank
-        origin_status_code    => '1L',  # for bank
-        origin_dfi_id         => '8L',  # for bank
-        batch_number          => '7R*D',
+        service_class_code    => '%-3.3s',
+        company_name          => '%-16.16s',
+        company_note_data     => '%-20.20s',
+        company_id            => '%-10.10s',
+        standard_entry_class_code => '%-3.3s',
+        company_entry_descr   => '%-10.10s',
+        effective_date        => '%-6.6s',
+        settlement_date       => '%-3.3s',  # for bank
+        origin_status_code    => '%-1.1s',  # for bank
+        origin_dfi_id         => '%-8.8s',  # for bank
+        batch_number          => '%07s',
 
-        entry_count           => '6R*D',
-        entry_hash            => '10R*D',
-        total_debit_amount    => '12R*D',
-        total_credit_amount   => '12R*D',
-        authen_code           => '19L',
-        bank_6                => '6L',
+        entry_count           => '%06s',
+        entry_hash            => '%010s',
+        total_debit_amount    => '%012s',
+        total_credit_amount   => '%012s',
+        authen_code           => '%-19.19s',
+        bank_6                => '%-6.6s',
 
-        batch_count            => '6R*D',
-        block_count            => '6R*D',
-        file_entry_count       => '8R*D',
-        bank_39                => '39L',
+        batch_count            => '%06s',
+        block_count            => '%06s',
+        file_entry_count       => '%08s',
+        bank_39                => '%-39.39s',
     } );
 }
 
@@ -528,76 +528,18 @@ sub _make_batch_header_record {
 sub fixedlength {
     my( $format, $data, $order ) = @_;
 
-    my $int_re = '([*])?(D)';
-    my $flt_re = '([*])?(F)(\d+)?';
-    my $numfmt_re = "($int_re|$flt_re)";
-    my $format_re =<<RE;
-        (\\d+)       # width
-        (R|L)?       # optional justification
-        (            # optional numerical formatting
-         $numfmt_re
-        )?
-RE
-
-    my $debug=0;
     my $fmt_string;
+    foreach my $field ( @$order ) {
+        croak "Format for the field $field was not defined\n"
+            unless defined $format->{$field};
 
-    foreach my $field ( @{ $order } ) {
+        carp "data for $field is not defined"
+            unless defined $data->{$field};
 
-        if ( ! defined $format->{$field} ) {
-            croak "Format for the field $field was not defined\n";
-        }
+        $data->{$field} ||= "";
 
-        if ( ! defined $data->{$field} ) {
-            carp "data for $field is not defined";
-            $data->{$field} = "";
-        }
-
-        if ( $format->{$field} =~ /$format_re/x ) {
-            my $width = $1;
-
-            my $just  = $2 || 'L';
-            $just = $just eq 'L' ? '-' : '';
-
-            my $text  = ( $3 || '' );
-
-            if ( $text =~ /$int_re/i or $text =~ /$flt_re/ ) {
-                my $zero_fill = $1 ? '0' : '';
-                my $d_or_f    = lc $2;
-
-                warn "d_of_f: $d_or_f" if $debug;
-                $d_or_f = ".$3$d_or_f" if ($d_or_f eq 'f');
-
-                my $fmt = "%${just}${zero_fill}${width}${d_or_f}";
-
-                warn "num sprintf :$fmt" if $debug;
-
-                my $dta = $data->{$field};
-
-                # crop text
-                if ( length($dta) > $width ) {
-                    $dta = substr( $dta, 0, $width );
-                }
-
-                $fmt_string .= sprintf( $fmt, $dta );
-            }
-            else {
-                my $fmt = "%${just}${width}s";
-                warn "str sprintf: $fmt" if $debug;
-
-                my $dta = $data->{$field};
-
-                # crop text
-                if ( length($dta) > $width ) {
-                    $dta = substr( $dta, 0, $width );
-                }
-
-                $fmt_string .= sprintf( $fmt, $dta );
-            }
-
-        } # end if match format
-
-    } # end foreach fields
+        $fmt_string .= sprintf $format->{$field}, $data->{$field};
+    }
 
     return $fmt_string;
 }
