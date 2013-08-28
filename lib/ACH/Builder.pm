@@ -4,6 +4,7 @@ use strict;
 use warnings;
 
 use POSIX qw( strftime );
+use Carp qw( carp croak );
 
 our $VERSION = '0.10';
 
@@ -29,12 +30,13 @@ sub new {
     $self->{__BATCH_ENTRY_COUNT__}     = 0;
     $self->{__BATCH_ENTRY_HASH__}      = 0;
 
-    $self->{__SERVICE_CLASS_CODE__}    = $vars->{service_class_code} || 200;
-    $self->{__IMMEDIATE_DEST_NAME__}   = $vars->{destination_name};
-    $self->{__IMMEDIATE_ORIGIN_NAME__} = $vars->{origination_name};
-    $self->{__IMMEDIATE_DEST__}        = $vars->{destination};
-    $self->{__IMMEDIATE_ORIGIN__}      = $vars->{origination};
-    $self->{__ORIGIN_STATUS_CODE__}    = $vars->{origin_status_code};
+    $self->set_service_class_code(      $vars->{service_class_code} || 200);
+    $self->set_immediate_dest_name(     $vars->{destination_name});
+    $self->set_immediate_origin_name(   $vars->{origination_name});
+    $self->set_immediate_dest(          $vars->{destination});
+    $self->set_immediate_origin(        $vars->{origination});
+
+    $self->{__ORIGIN_STATUS_CODE__}    = $vars->{origin_status_code} || 1;
     $self->{__ORIGINATING_DFI__}       = $vars->{origin_dfi_id} || substr $vars->{destination}, 0, 8;
 
     $self->{__ENTRY_CLASS_CODE__}      = $vars->{entry_class_code} || 'PPD';
@@ -128,7 +130,7 @@ sub set_immediate_dest {
 }
 
 #-------------------------------------------------
-# set_entry_desription() setter
+# set_entry_description() setter
 #-------------------------------------------------
 sub set_entry_description {
     my ( $self, $p ) = @_;
@@ -198,7 +200,7 @@ sub make_batch {
     # loop over the detail records
     foreach my $record ( @{ $records } ) {
 
-        die 'amount cannot be negative' if $record->{amount} < 0;
+        croak 'amount cannot be negative' if $record->{amount} < 0;
 
         if ($record->{transaction_code} =~ /^(27|37)$/) {
            #if it is a debit
@@ -212,7 +214,7 @@ sub make_batch {
            $self->{__CREDIT_AMOUNT__} += $record->{amount};
            $self->{__TOTAL_CREDIT__} += $record->{amount};
         } else {
-           die 'unsupported transaction_code';
+           croak 'unsupported transaction_code';
         }
 
         # modify batch values
@@ -543,11 +545,11 @@ RE
     foreach my $field ( @{ $order } ) {
 
         if ( ! defined $format->{$field} ) {
-            die( "Format for the field $field was not defined\n" );
+            croak "Format for the field $field was not defined\n";
         }
 
         if ( ! defined $data->{$field} ) {
-            warn( "data for $field is not defined" );
+            carp "data for $field is not defined";
             $data->{$field} = "";
         }
 
@@ -763,13 +765,13 @@ Returns the built ACH file.
 
 =item set_service_class_code
 
-=item set_destination_name
+=item set_immediate_dest_name
 
-=item set_destination
+=item set_immediate_dest
 
-=item set_origination_name
+=item set_immediate_origin_name
 
-=item set_origination
+=item set_immediate_origin
 
 =item set_entry_class_code
 
@@ -784,8 +786,6 @@ The code must be one of:
 =item set_entry_description
 
 =item set_company_id
-
-=item set_company_name
 
 =item set_company_note
 
