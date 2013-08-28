@@ -3,7 +3,7 @@ package ACH::Builder;
 use strict;
 use warnings;
 
-use POSIX qw( strftime );
+use POSIX qw( ceil strftime );
 use Carp qw( carp croak );
 
 our $VERSION = '0.10';
@@ -470,7 +470,7 @@ sub make_file_control_record {
     my $data = {
         record_type            => 9,
         batch_count            => $self->{__BATCH_COUNT__},
-        block_count            => $self->{__BLOCK_COUNT__},
+        block_count            => ceil($self->{__BATCH_COUNT__}/$self->{__BLOCKING_FACTOR__}),
         file_entry_count       => $self->{__ENTRY_COUNT__},
         entry_hash             => $self->{__ENTRY_HASH__},
         total_debit_amount     => $self->{__DEBIT_AMOUNT__},
