@@ -153,7 +153,6 @@ sub new {
 
     # Collapse given and default values
     $self->{__BATCH_COUNT__}           = 0;
-    $self->{__BLOCK_COUNT__}           = 0;
     $self->{__ENTRY_COUNT__}           = 0;
     $self->{__ENTRY_HASH__}            = 0;
     $self->{__DEBIT_AMOUNT__}          = 0;
@@ -473,7 +472,7 @@ sub make_file_control_record {
     my $data = {
         record_type            => 9,
         batch_count            => $self->{__BATCH_COUNT__},
-        block_count            => ceil($self->{__BATCH_COUNT__}/$self->{__BLOCKING_FACTOR__}),
+        block_count            => ceil(scalar(@{ $self->{__ACH_DATA__} })/$self->{__BLOCKING_FACTOR__}),
         file_entry_count       => $self->{__ENTRY_COUNT__},
         entry_hash             => $self->{__ENTRY_HASH__},
         total_debit_amount     => $self->{__DEBIT_AMOUNT__},
