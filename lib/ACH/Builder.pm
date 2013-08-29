@@ -703,7 +703,6 @@ sub set_immediate_origin {
     my ( $self, $p ) = @_;
     check_length($p, 'immediate_origin');
     $self->{__IMMEDIATE_ORIGIN__} = $p;
-    $self->{__ORIGINATING_DFI__} = substr $p, 0, 8;
 }
 
 =pod
@@ -735,6 +734,7 @@ sub set_immediate_dest {
     my ( $self, $p ) = @_;
     check_length($p, 'immediate_dest');
     $self->{__IMMEDIATE_DEST__} = $p;
+    $self->{__ORIGINATING_DFI__} = substr $p, 0, 8;
 }
 
 =pod
