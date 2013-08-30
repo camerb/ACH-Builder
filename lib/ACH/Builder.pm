@@ -30,8 +30,7 @@ ACH::Builder - Tools for building ACH (Automated Clearing House) files
 
       # Optional
       company_note      => 'BILL',
-      effective_date    => 'yymmdd',
-
+      effective_date    => '130903',
   } );
 
   # load some sample records
@@ -246,29 +245,23 @@ Returns a list of sample records ready for C<make_batch>. See above for format d
 =cut
 
 sub sample_detail_records {
-    my( $self ) = shift;
-
-    my @records;
-
-    push( @records, {
-        customer_name       => 'JOHN SMITH',
-        customer_acct       => sprintf( "%010d", '6124' )
-            . sprintf( "%08d", '2882282' ),
-        amount              => '2501',
-        routing_number      => '010010101',
-        bank_account        => '103030030',
-    } );
-
-    push( @records, {
-        customer_name       => 'JOHN SMITHSTIMTIMSTIMSIMSIMS',
-        customer_acct       => sprintf( "%010d", '4124' )
-                . sprintf( "%08d", '4882282' ),
-        amount              => '40801',
-        routing_number      => '010010401',
-        bank_account        => '440030030',
-    } );
-
-    return @records;
+    return {
+            customer_name       => 'JOHN SMITH',
+            customer_acct       => '1234-0123456',
+            amount              => '2501',
+            routing_number      => '010010101',
+            bank_account        => '103030030',
+            transaction_code    => '27',
+        },
+        {
+            customer_name       => 'ALICE VERYLONGNAMEGETSTRUNCATED',
+            customer_acct       => 'verylongaccountgetstruncated',
+            amount              => '40801',
+            routing_number      => '010010401',
+            bank_account        => '440030030',
+            transaction_code    => '32',
+        },
+    ;
 }
 
 =pod
@@ -283,24 +276,20 @@ C<make_file_header_record> before adding a batch to the file.
 sub make_batch {
     my ( $self, $records ) = @_;
 
-    return unless ref $records eq 'ARRAY' && @$records;
+    croak "Invalid or empty records for batch" unless ref $records eq 'ARRAY' && @$records;
 
-    # bump the batch count
     ++$self->{__BATCH_COUNT__};
 
-    # inititalize the batch variables
+    # reset the batch variables
     $self->{__BATCH_TOTAL_DEBIT__}  = 0;
     $self->{__BATCH_TOTAL_CREDIT__} = 0;
     $self->{__BATCH_ENTRY_COUNT__}  = 0;
     $self->{__BATCH_ENTRY_HASH__}   = 0;
 
-    # get batch header
     $self->_make_batch_header_record();
 
-    # loop over the detail records
-    foreach my $record ( @{ $records } ) {
-
-        croak 'amount cannot be negative' if $record->{amount} < 0;
+    foreach my $record ( @$records ) {
+        croak 'Amount cannot be negative' if $record->{amount} < 0;
 
         if ($record->{transaction_code} =~ /^(27|37)$/) {
             croak "Debits cannot be used with service_class_code 220" if $self->{__SERVICE_CLASS_CODE__} eq '220';
@@ -313,11 +302,11 @@ sub make_batch {
             $self->{__CREDIT_AMOUNT__} += $record->{amount};
             $self->{__TOTAL_CREDIT__} += $record->{amount};
         } else {
-            croak 'unsupported transaction_code';
+            croak "Unsupported transaction_code '$record->{transaction_code}'";
         }
 
         # modify batch values
-        # Hash is calculated without the MICR checksum digit
+        # Hash is calculated without the checksum digit
         $self->{__BATCH_ENTRY_HASH__} += substr $record->{routing_number}, 0, 8;
         ++$self->{__BATCH_ENTRY_COUNT__};
 
@@ -325,11 +314,9 @@ sub make_batch {
         $self->{__ENTRY_HASH__} += substr $record->{routing_number}, 0, 8;
         ++$self->{__ENTRY_COUNT__};
 
-        # get detail record
         $self->_make_detail_record( $record )
     }
 
-    # get batch control record
     $self->_make_batch_control_record();
 }
 
@@ -345,17 +332,16 @@ sub _make_detail_record {
         amount
         customer_acct
         customer_name
-        transaction_type
+        discretionary_data
         addenda
         entry_trace
     );
 
-    # add to record unless already defined
-    $record->{record_type}      ||= 6;
-    $record->{transaction_code} ||= 27;
-    $record->{transaction_type} ||= 'S';
-    $record->{entry_trace}      ||= '';
-    $record->{addenda}          ||= 0;
+    # default values for some fields
+    $record->{record_type}          ||= 6;
+    $record->{discretionary_data}   ||= '';
+    $record->{entry_trace}          ||= '';
+    $record->{addenda}              ||= 0;
 
     # stash detail record
     push( @{ $self->ach_data() },
@@ -504,8 +490,7 @@ sub format_rules {
         customer_name       => '%-22.22s',
         customer_acct       => '%-15.15s',
         amount              => '%010.10s',
-        bank_2              => '%-2.2s',
-        transaction_type    => '%-2.2s',
+        discretionary_data  => '%-2.2s',
         entry_trace         => '%-15.15s',
         addenda             => '%01.1s',
         trace_num           => '%-15.15s',
@@ -888,9 +873,19 @@ record format above).
 
 Tim Keefer <tkeefer@gmail.com>
 
-=head1 CONTRIBUTOR
+=head1 CONTRIBUTORS
+
+=over 4
+
+=item *
 
 Cameron Baustian <camerb@cpan.org>
+
+=item *
+
+Steven N. Severinghaus <sns-perl@severinghaus.org>
+
+=back
 
 =head1 COPYRIGHT
 
