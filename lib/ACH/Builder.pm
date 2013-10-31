@@ -332,7 +332,8 @@ sub _make_detail_record {
     # default values for some fields
     $record->{record_type}          ||= 6;
     $record->{discretionary_data}   ||= '';
-    $record->{entry_trace}          ||= '';
+    $record->{entry_trace}          ||= substr($self->{__ORIGINATING_DFI__}, 0, 8)
+                                        . sprintf("%07s", $self->{__ENTRY_COUNT__}+1);
     $record->{addenda}              ||= 0;
 
     # stash detail record
@@ -682,6 +683,7 @@ sub set_immediate_origin {
     my ( $self, $p ) = @_;
     check_length($p, 'immediate_origin');
     $self->{__IMMEDIATE_ORIGIN__} = $p;
+    $self->{__ORIGINATING_DFI__} = substr $p, 0, 8;
 }
 
 =pod
@@ -713,7 +715,6 @@ sub set_immediate_dest {
     my ( $self, $p ) = @_;
     check_length($p, 'immediate_dest');
     $self->{__IMMEDIATE_DEST__} = $p;
-    $self->{__ORIGINATING_DFI__} = substr $p, 0, 8;
 }
 
 =pod
