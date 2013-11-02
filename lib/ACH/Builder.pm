@@ -150,20 +150,14 @@ sub new {
     my $self = {};
     bless( $self, $class );
 
-    # Collapse given and default values
     $self->{__BATCH_COUNT__}           = 0;
     $self->{__ENTRY_COUNT__}           = 0;
     $self->{__ENTRY_HASH__}            = 0;
-    $self->{__DEBIT_AMOUNT__}          = 0;
-    $self->{__CREDIT_AMOUNT__}         = 0;
-
-    $self->{__BATCH_TOTAL_DEBIT__}     = 0;
-    $self->{__BATCH_TOTAL_CREDIT__}    = 0;
-    $self->{__BATCH_ENTRY_COUNT__}     = 0;
-    $self->{__BATCH_ENTRY_HASH__}      = 0;
-
+    $self->{__FILE_TOTAL_DEBIT__}      = 0;
+    $self->{__FILE_TOTAL_CREDIT__}     = 0;
     $self->{__ACH_DATA__}              = [];
 
+    # Collapse given and default values
     $self->set_service_class_code(      $vars->{service_class_code} || 200);
     $self->set_immediate_dest_name(     $vars->{destination_name});
     $self->set_immediate_origin_name(   $vars->{origination_name});
@@ -256,7 +250,7 @@ sub sample_detail_records {
         {
             customer_name       => 'ALICE VERYLONGNAMEGETSTRUNCATED',
             customer_acct       => 'verylongaccountgetstruncated',
-            amount              => '40801',
+            amount              => '2501',
             routing_number      => '010010401',
             bank_account        => '440030030',
             transaction_code    => '32',
@@ -294,13 +288,11 @@ sub make_batch {
         if ($record->{transaction_code} =~ /^(27|37)$/) {
             croak "Debits cannot be used with service_class_code 220" if $self->{__SERVICE_CLASS_CODE__} eq '220';
             $self->{__BATCH_TOTAL_DEBIT__} += $record->{amount};
-            $self->{__DEBIT_AMOUNT__} += $record->{amount};
-            $self->{__TOTAL_DEBIT__} += $record->{amount};
+            $self->{__FILE_TOTAL_DEBIT__} += $record->{amount};
         } elsif ($record->{transaction_code} =~ /^(22|32)$/ ) {
             croak "Credits cannot be used with service_class_code 220" if $self->{__SERVICE_CLASS_CODE__} eq '225';
             $self->{__BATCH_TOTAL_CREDIT__} += $record->{amount};
-            $self->{__CREDIT_AMOUNT__} += $record->{amount};
-            $self->{__TOTAL_CREDIT__} += $record->{amount};
+            $self->{__FILE_TOTAL_CREDIT__} += $record->{amount};
         } else {
             croak "Unsupported transaction_code '$record->{transaction_code}'";
         }
@@ -340,7 +332,8 @@ sub _make_detail_record {
     # default values for some fields
     $record->{record_type}          ||= 6;
     $record->{discretionary_data}   ||= '';
-    $record->{entry_trace}          ||= '';
+    $record->{entry_trace}          ||= substr($self->{__ORIGINATING_DFI__}, 0, 8)
+                                        . sprintf("%07s", $self->{__ENTRY_COUNT__}+1);
     $record->{addenda}              ||= 0;
 
     # stash detail record
@@ -444,6 +437,9 @@ once. Afterward, the ACH file can be retrieved in its entirety with C<to_string>
 sub make_file_control_record {
     my( $self ) = @_;
 
+    croak "Detail records have unbalanced debits ($self->{__FILE_TOTAL_DEBIT__}) and credits ($self->{__FILE_TOTAL_CREDIT__})!"
+        unless $self->{__FILE_TOTAL_DEBIT__} eq $self->{__FILE_TOTAL_CREDIT__};
+
     my @def = qw(
        record_type
        batch_count
@@ -461,8 +457,8 @@ sub make_file_control_record {
         block_count            => ceil(scalar(@{ $self->{__ACH_DATA__} })/$self->{__BLOCKING_FACTOR__}),
         file_entry_count       => $self->{__ENTRY_COUNT__},
         entry_hash             => $self->{__ENTRY_HASH__},
-        total_debit_amount     => $self->{__DEBIT_AMOUNT__},
-        total_credit_amount    => $self->{__CREDIT_AMOUNT__},
+        total_debit_amount     => $self->{__FILE_TOTAL_DEBIT__},
+        total_credit_amount    => $self->{__FILE_TOTAL_CREDIT__},
         bank_39                => '',
     };
 
@@ -687,6 +683,7 @@ sub set_immediate_origin {
     my ( $self, $p ) = @_;
     check_length($p, 'immediate_origin');
     $self->{__IMMEDIATE_ORIGIN__} = $p;
+    $self->{__ORIGINATING_DFI__} = substr $p, 0, 8;
 }
 
 =pod
@@ -718,7 +715,6 @@ sub set_immediate_dest {
     my ( $self, $p ) = @_;
     check_length($p, 'immediate_dest');
     $self->{__IMMEDIATE_DEST__} = $p;
-    $self->{__ORIGINATING_DFI__} = substr $p, 0, 8;
 }
 
 =pod
